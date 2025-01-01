@@ -9,6 +9,12 @@
     * {
       margin: 0;
       padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      padding: 20px;
     }
     .your-id {
       font-weight: bold;
@@ -16,115 +22,155 @@
       font-size: 1.5rem;
     }
     .input {
-      width: 60vw;
-      min-height: 30px;
+      width: calc(100% - 20px);
       padding: 10px;
       font-family: 'Courier New', Courier, monospace;
       outline: none;
       background: #e8e8e8;
-      box-shadow: 5px 5px 17px #c8c8c8,
-      -5px -5px 17px #ffffff;
+      box-shadow: 5px 5px 17px #c8c8c8, -5px -5px 17px #ffffff;
       border: none;
       border-radius: 10px;
-      transition: all .5s;
+      margin-bottom: 10px;
     }
     .input::placeholder {
-      font-size: 20px;
+      font-size: 16px;
     }
     .input:focus {
       background: #e8e8e8;
-      box-shadow: inset 5px 5px 17px #c8c8c8,
-      inset -5px -5px 17px #ffffff;
+      box-shadow: inset 5px 5px 17px #c8c8c8, inset -5px -5px 17px #ffffff;
     }
     button {
-      padding: 15px;
-      margin: 15px;
+      padding: 10px;
       background-color: tan;
       font-weight: bold;
       color: white;
-      font-size: 15px;
+      font-size: 14px;
       border: none;
       border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 20px;
       box-shadow: 0 0 10px 5px #c8c8c8;
     }
-    .Your-video , .Friend-video {
-      width: calc(100vw - 20px);
+    .messages {
+      background: white;
       border-radius: 10px;
-      margin: 10px;
-      border: 3px solid #775a5a;
-      background-color: black;
+      padding: 10px;
+      height: 300px;
+      overflow-y: scroll;
+      box-shadow: 5px 5px 17px #c8c8c8, -5px -5px 17px #ffffff;
+    }
+    .message {
+      margin: 5px 0;
+    }
+    .sent {
+      font-weight: bold;
+      color: green;
+    }
+    .received {
+      font-weight: bold;
+      color: blue;
     }
   </style>
 </head>
 <body>
-  <div class="your-id" id="your-id">
-    Your id : Loading..
-  </div>
-  <input id="fr-id" class="input" placeholder="friends id" />
-<button id="btn" disabled>Call friend</button>
+  <div class="your-id" id="your-id">Your ID: Loading...</div>
+  <input id="fr-id" class="input" placeholder="Friend's ID" />
+  <button id="connect-btn" disabled>Connect</button>
 
-<span style="margin:10px; font-size:15px; font-weight:bold;">You </span>
-<video id="yr-video" class="Your-video" autoplay muted></video>
+  <div class="messages" id="messages"></div>
 
-<span style="margin:10px; font-size:15px; font-weight:bold;">Friend </span>
-<video autoplay muted class="Friend-video" id="fr-video"></video>
+  <input id="msg-input" class="input" placeholder="Type your message..." disabled />
+  <button id="send-btn" disabled>Send</button>
 
-<script>
-  let frid, lcid, localStream;
-  frid = document.getElementById("fr-id");
-  const shower = document.getElementById("your-id");
-  const localVideo = document.getElementById("yr-video");
-  const remoteVideo = document.getElementById("fr-video");
-  const connectBtn = document.getElementById("btn");
+  <script>
+    const frIdInput = document.getElementById("fr-id");
+    const connectBtn = document.getElementById("connect-btn");
+    const msgInput = document.getElementById("msg-input");
+    const sendBtn = document.getElementById("send-btn");
+    const messagesDiv = document.getElementById("messages");
+    const yourIdDiv = document.getElementById("your-id");
 
-  const peer = new Peer();
+    let conn; // Connection object
 
-  async function initializeWebcam() {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: true, audio: true
+    // Initialize PeerJS with a STUN server
+    const peer = new Peer({
+      config: {
+        iceServers: [{ url: 'stun:stun.l.google.com:19302' }] // Google's STUN server
+      }
+    });
+
+    // Display your ID when PeerJS is ready
+    peer.on("open", (id) => {
+      yourIdDiv.textContent = `Your ID: ${id}`;
+      connectBtn.disabled = false;
+    });
+
+    // Connect to a friend's Peer ID
+    connectBtn.addEventListener("click", () => {
+      const friendId = frIdInput.value.trim();
+      if (!friendId) {
+        alert("Please enter a friend's ID.");
+        return;
+      }
+
+      conn = peer.connect(friendId);
+
+      // Handle data received from the friend
+      conn.on("data", (data) => {
+        displayMessage(data, "received");
       });
-      localVideo.srcObject = localStream;
-    } catch (error) {
-      alert("Could not access your webcam or microphone. Please check your permissions.");
-      console.error("Webcam error:", error);
-    }
-  }
 
-  function handleClick() {
-    if (!frid.value.trim()) {
-      alert("Please enter your friend's ID!");
-      return;
-    }
-
-    lcid = frid.value.trim();
-    const call = peer.call(lcid, localStream);
-    call.on("stream", (remoteStream) => {
-      remoteVideo.srcObject = remoteStream;
+      conn.on("open", () => {
+        enableMessaging();
+        displayMessage(`Connected to ${friendId}`, "system");
+      });
     });
-  }
 
-  peer.on("call", (call) => {
-    call.answer(localStream);
-    call.on("stream", (remoteStream) => {
-      remoteVideo.srcObject = remoteStream;
+    // Send a message to the connected friend
+    sendBtn.addEventListener("click", () => {
+      const message = msgInput.value.trim();
+      if (!message) return;
+
+      conn.send(message);
+      displayMessage(message, "sent");
+      msgInput.value = "";
     });
-  });
 
-  peer.on("open", (id) => {
-    connectBtn.disabled = false;
-    lcid = id;
-    shower.textContent = `Your id : ${id}`;
-  });
+    // Handle incoming connection
+    peer.on("connection", (incomingConn) => {
+      conn = incomingConn;
 
-  frid.addEventListener("input", () => {
-    connectBtn.disabled = !frid.value.trim();
-  });
+      conn.on("data", (data) => {
+        displayMessage(data, "received");
+      });
 
-  connectBtn.addEventListener("click", handleClick);
+      conn.on("open", () => {
+        enableMessaging();
+        displayMessage(`Friend connected`, "system");
+      });
+    });
 
-  // Initialize webcam on page load
-  initializeWebcam();
-</script>
+    // Display messages in the message box
+    function displayMessage(message, type) {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = `message ${type}`;
+      msgDiv.textContent = message;
+      messagesDiv.appendChild(msgDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Enable messaging inputs
+    function enableMessaging() {
+      msgInput.disabled = false;
+      sendBtn.disabled = false;
+      frIdInput.disabled = true;
+      connectBtn.disabled = true;
+    }
+
+    // Enable connect button only if input is not empty
+    frIdInput.addEventListener("input", () => {
+      connectBtn.disabled = !frIdInput.value.trim();
+    });
+  </script>
 </body>
 </html>
